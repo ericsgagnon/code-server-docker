@@ -1,14 +1,15 @@
 # docker build -t ericsgagnon/code-server:dev .
 # code-server with more up to date versions of languages:
-# go 1.12.6
-# python 3.7.3
+# go 1.12.7
+# python 3.7.4
 
-ARG GOLANG_VERSION=1.12.6
+ARG GOLANG_VERSION=1.12.7
+ARG PYTHON_VERSION=3.7.4
+#ARG PYTHON_PIP_VERSION=19.2.1 # shouldn't need to set this explicitly
+ARG OIC_VERSION=19.3
+ARG CODE_SERVER_VERSION=1.1156-vsc1.33.1
 
-#FROM golang:1.12.6-stretch as golang
-FROM golang:${GOLANG_VERSION}-stretch as golang
-
-ARG   OIC_VERSION=19.3
+#FROM golang:${GOLANG_VERSION} as golang
 
 # Oracle Instant Client (oci) ########################################################################
 #
@@ -16,21 +17,29 @@ ARG   OIC_VERSION=19.3
 
 FROM oraclelinux:7-slim as oracle-instant-client
 
-ARG  OIC_VERSION
-
+ENV OIC_VERSION ${OIC_VERSION}
 
 RUN  curl -o /etc/yum.repos.d/public-yum-ol7.repo https://yum.oracle.com/public-yum-ol7.repo && \
      yum-config-manager --enable ol7_oracle_instantclient && \
-     yum -y install oracle-instantclient$OIC_VERSION-basic oracle-instantclient$OIC_VERSION-devel oracle-instantclient$OIC_VERSION-sqlplus && \
+     yum -y install \
+	 oracle-instantclient$OIC_VERSION-basic \
+	 oracle-instantclient$OIC_VERSION-devel \
+	 oracle-instantclient$OIC_VERSION-sqlplus && \
      rm -rf /var/cache/yum
 
+# Final Stage ###########################################################################################
+# using python base image for convenience - it has the most complicated install process...
+FROM python:${PYTHON_VERSION} as final
 
-FROM codercom/code-server:latest as code-server
+ENV TZ UTC
+ENV DEBIAN_FRONTEND noninteractive
 
 USER root
 
+# Go ##################################################
+
 # setup go
-ENV GOLANG_VERSION 1.12.6
+ENV GOLANG_VERSION ${GOLANG_VERSION}
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
@@ -45,100 +54,68 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 		pkg-config \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=golang /usr/local/go /usr/local/go
+COPY --from=golang:${GOLANG_VERSION} /usr/local/go /usr/local/go
 
-#WORKDIR $GOPATH
+# DB Drivers ##########################################
 
-# python
-# https://github.com/docker-library/python/blob/34c9df35e9a69e9f0edde88e861b543edb8bc07a/3.7/stretch/Dockerfile
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "update.sh"
-#
-# PLEASE DO NOT EDIT IT DIRECTLY.
-#
+# Oracle drivers are super-special
+ENV  LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/oracle/$OIC_VERSION/client64/lib:/usr/include/oracle/$OIC_VERSION/client64/
+ENV  OCI_LIB=/usr/lib/oracle/$OIC_VERSION/client64/lib
+ENV  OCI_INC=/usr/include/oracle/$OIC_VERSION/client64
 
-#FROM buildpack-deps:stretch
+COPY --from=oracle-instant-client  /usr/lib/oracle /usr/lib/oracle
+COPY --from=oracle-instant-client  /usr/share/oracle /usr/share/oracle
+COPY --from=oracle-instant-client  /usr/include/oracle /usr/include/oracle
+COPY ./oci8.pc /usr/lib/pkgconfig/oci8.pc
 
-# ensure local python is preferred over distribution python
-ENV PATH /usr/local/bin:$PATH
+RUN  sed -i 's/OIC_VERSION/'"$OIC_VERSION"'/' /usr/lib/pkgconfig/oci8.pc && \
+     apt update && apt install -y --install-suggests \
+     libaio1 \
+     unixodbc \
+     unixodbc-dev \
+     tdsodbc \
+     odbc-postgresql \
+     libsqliteodbc \
+     mariadb-client \
+     curl \
+     net-tools
 
-# http://bugs.python.org/issue19846
-# > At the moment, setting "LANG=C" on a Linux system *fundamentally breaks Python 3*, and that's not OK.
-ENV LANG C.UTF-8
-ENV GPG_KEY 0D96DF4D4110E5C43FBFB17F2D347EA6AA65421D
-ENV PYTHON_VERSION 3.7.3
-ENV TZ UTC
-ENV DEBIAN_FRONTEND noninteractive
+# Code-Server #########################################
 
-# extra dependencies (over what buildpack-deps already includes)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-		tk-dev \
-		uuid-dev \
-	&& rm -rf /var/lib/apt/lists/*
+ENV CODE_SERVER_VERSION ${CODE_SERVER_VERSION}
 
+COPY --from=codercom/code-server:${CODE_SERVER_VERSION} /usr/local/bin/code-server /usr/local/bin/code-server
 
-RUN set -ex \
-	\
-	&& wget -O python.tar.xz "https://www.python.org/ftp/python/${PYTHON_VERSION%%[a-z]*}/Python-$PYTHON_VERSION.tar.xz" \
-	&& wget -O python.tar.xz.asc "https://www.python.org/ftp/python/${PYTHON_VERSION%%[a-z]*}/Python-$PYTHON_VERSION.tar.xz.asc" \
-	&& export GNUPGHOME="$(mktemp -d)" \
-	&& gpg --batch --keyserver ha.pool.sks-keyservers.net --recv-keys "$GPG_KEY" \
-	&& gpg --batch --verify python.tar.xz.asc python.tar.xz \
-	&& { command -v gpgconf > /dev/null && gpgconf --kill all || :; } \
-	&& rm -rf "$GNUPGHOME" python.tar.xz.asc \
-	&& mkdir -p /usr/src/python \
-	&& tar -xJC /usr/src/python --strip-components=1 -f python.tar.xz \
-	&& rm python.tar.xz \
-	\
-	&& cd /usr/src/python \
-	&& gnuArch="$(dpkg-architecture --query DEB_BUILD_GNU_TYPE)" \
-	&& ./configure \
-		--build="$gnuArch" \
-		--enable-loadable-sqlite-extensions \
-		--enable-shared \
-		--with-system-expat \
-		--with-system-ffi \
-		--without-ensurepip \
-	&& make -j "$(nproc)" \
-	&& make install \
-	&& ldconfig \
-	\
-	&& find /usr/local -depth \
-		\( \
-			\( -type d -a \( -name test -o -name tests \) \) \
-			-o \
-			\( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
-		\) -exec rm -rf '{}' + \
-	&& rm -rf /usr/src/python \
-	\
-	&& python3 --version
+# setup codercom/code-server
+RUN apt-get update && apt-get install -y \
+	openssl \
+	git \
+	locales \
+	sudo \
+	dumb-init \
+	vim \
+	curl \
+	wget \
+	nano
 
-# make some useful symlinks that are expected to exist
-RUN cd /usr/local/bin \
-	&& ln -s idle3 idle \
-	&& ln -s pydoc3 pydoc \
-	&& ln -s python3 python \
-	&& ln -s python3-config python-config
+RUN locale-gen en_US.UTF-8
+# We unfortunately cannot use update-locale because docker will not use the env variables
+# configured in /etc/default/locale so we need to set it manually.
+ENV LC_ALL=en_US.UTF-8
 
-# if this is called "PIP_VERSION", pip explodes with "ValueError: invalid truth value '<VERSION>'"
-ENV PYTHON_PIP_VERSION 19.1.1
+RUN adduser --gecos '' --disabled-password coder && \
+	echo "coder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd
 
-RUN set -ex; \
-	\
-	wget -O get-pip.py 'https://bootstrap.pypa.io/get-pip.py'; \
-	\
-	python get-pip.py \
-		--disable-pip-version-check \
-		--no-cache-dir \
-		"pip==$PYTHON_PIP_VERSION" \
-	; \
-	pip --version; \
-	\
-	find /usr/local -depth \
-		\( \
-			\( -type d -a \( -name test -o -name tests \) \) \
-			-o \
-			\( -type f -a \( -name '*.pyc' -o -name '*.pyo' \) \) \
-		\) -exec rm -rf '{}' +; \
-	rm -f get-pip.py
+USER coder
+# We create first instead of just using WORKDIR as when WORKDIR creates, the user is root.
+RUN mkdir -p /home/coder/project
 
-#CMD ["python3"]
+WORKDIR /home/coder/project
+
+# This assures we have a volume mounted even if the user forgot to do bind mount.
+# So that they do not lose their data if they delete the container.
+VOLUME [ "/home/coder/project" ]
+
+EXPOSE 8443
+
+ENTRYPOINT ["dumb-init", "code-server"]
