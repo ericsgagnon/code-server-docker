@@ -9,7 +9,9 @@ ARG PYTHON_VERSION=3.7.4
 ARG OIC_VERSION=19.3
 ARG CODE_SERVER_VERSION=1.1156-vsc1.33.1
 
-#FROM golang:${GOLANG_VERSION} as golang
+FROM golang:${GOLANG_VERSION} as golang
+
+FROM codercom/code-server:${CODE_SERVER_VERSION} as code-server
 
 # Oracle Instant Client (oci) ########################################################################
 #
@@ -17,6 +19,7 @@ ARG CODE_SERVER_VERSION=1.1156-vsc1.33.1
 
 FROM oraclelinux:7-slim as oracle-instant-client
 
+ARG OIC_VERSION
 ENV OIC_VERSION ${OIC_VERSION}
 
 RUN  curl -o /etc/yum.repos.d/public-yum-ol7.repo https://yum.oracle.com/public-yum-ol7.repo && \
@@ -31,6 +34,8 @@ RUN  curl -o /etc/yum.repos.d/public-yum-ol7.repo https://yum.oracle.com/public-
 # using python base image for convenience - it has the most complicated install process...
 FROM python:${PYTHON_VERSION} as final
 
+ARG OIC_VERSION
+ENV OIC_VERSION ${OIC_VERSION}
 ENV TZ UTC
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -39,6 +44,7 @@ USER root
 # Go ##################################################
 
 # setup go
+ARG GOLANG_VERSION
 ENV GOLANG_VERSION ${GOLANG_VERSION}
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
@@ -54,7 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 		pkg-config \
 	&& rm -rf /var/lib/apt/lists/*
 
-COPY --from=golang:${GOLANG_VERSION} /usr/local/go /usr/local/go
+COPY --from=golang /usr/local/go /usr/local/go
 
 # DB Drivers ##########################################
 
@@ -69,7 +75,7 @@ COPY --from=oracle-instant-client  /usr/include/oracle /usr/include/oracle
 COPY ./oci8.pc /usr/lib/pkgconfig/oci8.pc
 
 RUN  sed -i 's/OIC_VERSION/'"$OIC_VERSION"'/' /usr/lib/pkgconfig/oci8.pc && \
-     apt update && apt install -y --install-suggests \
+     apt update && apt install -y \
      libaio1 \
      unixodbc \
      unixodbc-dev \
@@ -81,10 +87,10 @@ RUN  sed -i 's/OIC_VERSION/'"$OIC_VERSION"'/' /usr/lib/pkgconfig/oci8.pc && \
      net-tools
 
 # Code-Server #########################################
-
+ARG CODE_SERVER_VERSION
 ENV CODE_SERVER_VERSION ${CODE_SERVER_VERSION}
 
-COPY --from=codercom/code-server:${CODE_SERVER_VERSION} /usr/local/bin/code-server /usr/local/bin/code-server
+COPY --from=code-server /usr/local/bin/code-server /usr/local/bin/code-server
 
 # setup codercom/code-server
 RUN apt-get update && apt-get install -y \
@@ -101,17 +107,18 @@ RUN apt-get update && apt-get install -y \
 RUN locale-gen en_US.UTF-8
 # We unfortunately cannot use update-locale because docker will not use the env variables
 # configured in /etc/default/locale so we need to set it manually.
-ENV LC_ALL=en_US.UTF-8
+# ENV LC_ALL=en_US.UTF-8
 
 RUN adduser --gecos '' --disabled-password coder && \
 	echo "coder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/nopasswd
 
 USER coder
+
 # We create first instead of just using WORKDIR as when WORKDIR creates, the user is root.
 RUN mkdir -p /home/coder/project
 
 WORKDIR /home/coder/project
-
+USER root
 # This assures we have a volume mounted even if the user forgot to do bind mount.
 # So that they do not lose their data if they delete the container.
 VOLUME [ "/home/coder/project" ]
