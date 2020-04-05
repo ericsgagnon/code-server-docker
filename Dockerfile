@@ -1,7 +1,8 @@
-# docker build -t ericsgagnon/code-server:3.0.1 -f ./Dockerfile .
-# docker run -dit --name code-server -p 9101:8080 ericsgagnon/code-server:3.0.1
+# docker build -t ericsgagnon/code-server:3.0.2 -f ./Dockerfile .
+# docker run -dit --name code-server -p 9101:8080 ericsgagnon/code-server:3.0.2
 # docker logs code-server
 # docker rm -fv code-server
+# docker push ericsgagnon/code-server:3.0.2
 
 # Description: ##################################################
 # code-server with as many up-to-date, pre-installed tools as I 
@@ -20,7 +21,7 @@ ARG RUST_VERSION=1.42
 ARG R_VERSION=3.6.2
 ARG PYTHON_VERSION=3.8
 ARG OIC_VERSION=19.6
-ARG CODE_SERVER_VERSION=3.0.1
+ARG CODE_SERVER_VERSION=3.0.2
 
 FROM golang:${GOLANG_VERSION}       as golang
 FROM rocker/geospatial:${R_VERSION} as rlang
@@ -135,6 +136,8 @@ RUN apt install -y \
 
 # code-server #############################################
 
+USER root
+
 ENV CODE_SERVER_VERSION=${CODE_SERVER_VERSION}
 
 RUN apt update && apt install -y --no-install-recommends \
@@ -147,7 +150,10 @@ RUN apt update && apt install -y --no-install-recommends \
     nano \
     procps \
     ssh \
-    vim
+    vim \
+    dnsutils \
+    cifs-utils \
+    libnss-wrapper
 
 RUN echo "alias ll='ls -alh '" >> /etc/skel/.bashrc && \
     echo "source <(kubectl completion bash)" >> /etc/skel/.bashrc && \
