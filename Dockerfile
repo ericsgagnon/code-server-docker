@@ -1,8 +1,8 @@
-# docker build -t ericsgagnon/code-server:3.0.2 -f ./Dockerfile .
-# docker run -dit --name code-server -p 9101:8080 ericsgagnon/code-server:3.0.2
+# docker build -t ericsgagnon/code-server:3.1.1 -f ./Dockerfile .
+# docker run -dit --name code-server -p 9101:8080 ericsgagnon/code-server:3.1.1
 # docker logs code-server
 # docker rm -fv code-server
-# docker push ericsgagnon/code-server:3.0.2
+# docker push ericsgagnon/code-server:3.1.1
 
 # Description: ##################################################
 # code-server with as many up-to-date, pre-installed tools as I 
@@ -18,10 +18,10 @@
 #ARG BASE_OS=bionic
 ARG GOLANG_VERSION=1.14
 ARG RUST_VERSION=1.42
-ARG R_VERSION=3.6.2
+ARG R_VERSION=3.6.3
 ARG PYTHON_VERSION=3.8
 ARG OIC_VERSION=19.6
-ARG CODE_SERVER_VERSION=3.0.2
+ARG CODE_SERVER_VERSION=3.1.1
 
 FROM golang:${GOLANG_VERSION}       as golang
 FROM rocker/geospatial:${R_VERSION} as rlang
@@ -65,7 +65,7 @@ COPY --from=python /usr/local/bin/  /usr/local/bin/
 RUN ldconfig
 
 # go ######################################################
-ARG GOLANG_VERSION=1.14.1
+ARG GOLANG_VERSION=${GOLANG_VERSION}
 
 ENV GOLANG_VERSION=${GOLANG_VERSION}
 ENV GOPATH /go
