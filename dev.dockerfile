@@ -2,11 +2,11 @@
 # code-server with more up to date versions of languages:
 
 #ARG BASE_OS=buster
-ARG BASE_OS=bionic
-ARG GOLANG_VERSION=1.14
-ARG RUST_VERSION=1.42
-ARG R_VERSION=3.6.2
-ARG PYTHON_VERSION=3.8
+ARG BASE_OS=focal
+ARG GOLANG_VERSION=1.15
+ARG RUST_VERSION=1.47
+ARG R_VERSION=4.0.3
+ARG PYTHON_VERSION=3.9
 #ARG PYTHON_PIP_VERSION=19.2.1 # shouldn't need to set this explicitly
 ARG OIC_VERSION=19.3
 ARG CODE_SERVER_VERSION=3.0.1
@@ -59,7 +59,7 @@ RUN apt update && apt install -y \
 
 RUN echo $PYTHON_VERSION $GOLANG_VERSION ${GOLANG_VERSION}
 
-RUN apt update && apt install -y \
+RUN apt-get update && apt-get install -y \
 		libbluetooth-dev \
 		tk-dev \
 		uuid-dev \
@@ -91,4 +91,71 @@ RUN apt-get update \
     sqlite3 \
     tk-dev \
     unixodbc-dev
+
+###########################################################################################
+# adduser --gecos "" coder
+
+RUN apt-get update -y && apt-get install \
+    apt-utils \
+    manpages \
+    man-db \
+    nano \
+
+
+#adduser 
+
+
+
+RUN apt-get update && apt-get install -y \
+		libbluetooth-dev \
+		tk-dev \
+		uuid-dev \
+    lsb-release \
+	  && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    manpages \
+    man-db \
+    nano \
+    lbzip2 \
+    libfftw3-dev \
+    libgdal-dev \
+    libgeos-dev \
+    libgsl0-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libhdf4-alt-dev \
+    libhdf5-dev \
+    libjq-dev \
+    libproj-dev \
+    libprotobuf-dev \
+    libnetcdf-dev \
+    libsqlite3-dev \
+    libssl-dev \
+    libudunits2-dev \
+    netcdf-bin \
+    postgis \
+    protobuf-compiler \
+    sqlite3 \
+    tk-dev \
+    unixodbc-dev
+ 
+ nfs-common
+
+
+# Create the file repository configuration:
+sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+
+# Import the repository signing key:
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+
+# Update the package lists:
+apt-get update
+
+# Install the latest version of PostgreSQL.
+# If you want a specific version, use 'postgresql-12' or similar instead of 'postgresql':
+apt-get -y install postgresql
+
+
+nfs \
 

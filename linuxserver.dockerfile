@@ -7,7 +7,7 @@
 #  ########################################################
 
 #ARG BASE_OS=bionic
-ARG GOLANG_VERSION=1.14
+ARG GOLANG_VERSION=1.15
 ARG RUST_VERSION=1.42
 ARG R_VERSION=3.6.2
 ARG PYTHON_VERSION=3.8

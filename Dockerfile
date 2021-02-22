@@ -7,21 +7,21 @@
 # Description: ##################################################
 # code-server with as many up-to-date, pre-installed tools as I 
 # can manage. Note that, due to the extreme PITA of installing R
-# packages on linux (all compiled by source...), the image uses 
-# an image derived from rocker/geospatial as its base. If I 
-# have time (or if I can find a cran mirror for linux that serves 
-# binaries), I may eventually swap this to pure buildpack-deps.
+# packages on linux, the image uses an image derived from 
+# rocker/ml-verse as its base. If I have time (or if I can find 
+# a cran mirror for linux that serves binaries), I may eventually 
+# swap this to pure buildpack-deps.
 # ###############################################################
 
 #  ########################################################
 
 #ARG BASE_OS=bionic
-ARG GOLANG_VERSION=1.14
-ARG RUST_VERSION=1.42
-ARG R_VERSION=3.6.3
-ARG PYTHON_VERSION=3.8
+ARG GOLANG_VERSION=1.15
+ARG RUST_VERSION=1.47
+ARG R_VERSION=4.0.3
+ARG PYTHON_VERSION=3.9
 ARG OIC_VERSION=19.6
-ARG CODE_SERVER_VERSION=3.1.1
+ARG CODE_SERVER_VERSION=3.7.1
 
 FROM golang:${GOLANG_VERSION}       as golang
 FROM rocker/geospatial:${R_VERSION} as rlang
@@ -189,3 +189,10 @@ EXPOSE 8080
 USER coder
 WORKDIR /home/coder
 ENTRYPOINT ["dumb-init", "fixuid", "-q", "/usr/local/bin/code-server", "--host", "0.0.0.0", "."]
+
+
+
+
+# docker run -dit --name code -p 8443:8443 -e PASSWORD=password -e DOCKER_MODS="linuxserver/mods:code-server-golang|linuxserver/mods:code-server-python3" linuxserver/code-server:v3.7.4-ls61
+# docker rm -fv code
+#
